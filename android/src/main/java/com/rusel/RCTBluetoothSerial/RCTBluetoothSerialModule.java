@@ -58,6 +58,7 @@ public class RCTBluetoothSerialModule extends ReactContextBaseJavaModule impleme
     private Promise mConnectedPromise;
     private Promise mDeviceDiscoveryPromise;
     private Promise mPairDevicePromise;
+    private String delimiter = "";
 
     public RCTBluetoothSerialModule(ReactApplicationContext reactContext) {
         super(reactContext);
@@ -210,6 +211,13 @@ public class RCTBluetoothSerialModule extends ReactContextBaseJavaModule impleme
         } else {
             promise.resolve(false);
         }
+    }
+
+    @ReactMethod
+    public void withDelimiter(String delimiter, Promise promise) {
+        if (D) Log.d(TAG, "withDelimiter: " + delimiter);
+        this.delimiter = delimiter;
+        promise.resolve(true);
     }
 
     /**************************************/
@@ -376,13 +384,7 @@ public class RCTBluetoothSerialModule extends ReactContextBaseJavaModule impleme
 
     @ReactMethod
     public void readUntilDelimiter(String delimiter, Promise promise) {
-        String data = "";
-        int index = mBuffer.indexOf(delimiter, 0);
-        if (index > -1) {
-            data = mBuffer.substring(0, index + delimiter.length());
-            mBuffer.delete(0, index + delimiter.length());
-        }
-        promise.resolve(data);
+        promise.resolve(readUntil(delimiter));
     }
 
 
@@ -475,9 +477,23 @@ public class RCTBluetoothSerialModule extends ReactContextBaseJavaModule impleme
      * @param data Message
      */
     void onData (String data) {
-        WritableMap params = Arguments.createMap();
-        params.putString("data", data);
-        sendEvent(DEVICE_READ, params);
+        mBuffer.append(data);
+        String completeData = readUntil(this.delimiter);
+        if (completeData != null && completeData.length() > 0) {
+            WritableMap params = Arguments.createMap();
+            params.putString("data", completeData);
+            sendEvent(DEVICE_READ, params);
+        }
+    }
+
+    private String readUntil(String delimiter) {
+        String data = "";
+        int index = mBuffer.indexOf(delimiter, 0);
+        if (index > -1) {
+            data = mBuffer.substring(0, index + delimiter.length());
+            mBuffer.delete(0, index + delimiter.length());
+        }
+        return data;
     }
 
     /*********************/
@@ -499,7 +515,7 @@ public class RCTBluetoothSerialModule extends ReactContextBaseJavaModule impleme
      */
     private void sendEvent(String eventName, @Nullable WritableMap params) {
         if (mReactContext.hasActiveCatalystInstance()) {
-            if (D) Log.d(TAG, "Sending event" + eventName);
+            if (D) Log.d(TAG, "Sending event: " + eventName);
             mReactContext
                 .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
                 .emit(eventName, params);
